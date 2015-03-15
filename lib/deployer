@@ -1,0 +1,120 @@
+# -*- sh -*-
+
+cache_directory="$1"
+dest_directory="$2"
+
+function _print_usage {
+  echo "Usage:"
+  echo " $0 [cache_directory] [dest_directory]"
+  exit 1
+}
+
+function _check_dirs {
+  if [ ! -d "${cache_directory}" ] ; then
+    mkdir -p "${cache_directory}" ; rc=$?
+    if [ $rc -ne 0 ] ; then
+      echo "error: failed to create ${cache_directory}"
+      exit 1
+    fi
+  fi
+
+  if [ ! -d "${dest_directory}" ] ; then
+    mkdir -p "${dest_directory}" ; rc=$?
+    if [ $rc -ne 0 ] ; then
+      echo "error: failed to create ${dest_directory}"
+      exit 1
+    fi
+  fi
+}
+
+function _check_args {
+  if [ -z "${cache_directory}" -a -z "${dest_directory}"] ; then
+    _print_sage
+  fi
+}
+
+function _create_temp_directory {
+  temp_directory=$(mktemp -d $(dirname ${dest_directory})/.$(basename ${dest_directory})_XXX)
+}
+
+function _setup {
+  _check_args
+  _check_dirs
+  _create_temp_directory
+}
+
+function _translate_url_to_filename {
+  dependency_url=$1
+  sed 's/[:\/]/_/g' <<< ${dependency_url}
+}
+
+function _download_dependency {
+  url=$1
+  filename=$(_translate_url_to_filename $url)
+
+  if [ ! -f ${cache_directory}/${filename} ]; then
+    curl $url -o ${cache_directory}/${filename} -L --fail
+
+    if [ "$?" -ne "0" ] ; then
+      echo "Cancelled packaging because of HTTP error when fetching ${url}"
+      exit 1
+    fi
+  fi
+
+  ln "${cache_directory}/${filename}" "./dependencies/${filename}"
+}
+
+function _package_dependencies {
+  mkdir dependencies
+
+  for dependency in ${dependencies[@]}; do
+     _download_dependency ${dependency}
+  done
+}
+
+function _create_symlink {
+  from=$1
+  to=$2
+
+  pushd "${temp_directory}/dependencies" > /dev/null
+  ln -v -s "${from}" "${to}"
+  popd > /dev/null
+}
+
+function _build_symlinks {
+  for symlink in ${symlinks[@]}; do
+    from=$(echo $symlink | cut -d ':' -f1)
+    to=$(echo $symlink | cut -d ':' -f2)
+    if [ -z "$from" -o -z "$to" ] ; then
+      echo "Cancelled packaging because symlinks syntax is wrong, should be /path/from:/path/to"
+      exit 1
+    fi
+    _create_symlink ${from} ${to}
+  done
+}
+
+function _remove_ignored_files {
+  for excluded_file in ${excluded_files[@]}; do
+    rm -rv "${excluded_file}"
+  done
+}
+
+function _copy_buildpack_to_working_directory {
+  cp -rf . "${temp_directory}"
+}
+
+function _copy_to_dest_directory {
+  rm -r "${dest_directory}"
+  mv "${temp_directory}" "${dest_directory}"
+}
+
+function deploy_buildpack {
+  _setup $@
+
+  _copy_buildpack_to_working_directory
+  cd ${temp_directory}
+  _package_dependencies
+  _build_symlinks
+  _remove_ignored_files
+  _copy_to_dest_directory
+}
