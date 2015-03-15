@@ -95,7 +95,7 @@ function _build_symlinks {
 
 function _remove_ignored_files {
   for excluded_file in ${excluded_files[@]}; do
-    rm -rv "${excluded_file}"
+    [ -e "${excluded_file}" ] && rm -rv "${excluded_file}"
   done
 }
 
