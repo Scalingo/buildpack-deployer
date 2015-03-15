@@ -35,6 +35,8 @@ function _check_args {
 
 function _create_temp_directory {
   temp_directory=$(mktemp -d $(dirname ${dest_directory})/.$(basename ${dest_directory})_XXX)
+  # Temp files are built as 600 and dirs as 700, need to chown
+  chmod 755 "${temp_directory}"
 }
 
 function _setup {
