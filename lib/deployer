@@ -29,7 +29,7 @@ function _check_dirs {
 
 function _check_args {
   if [ -z "${cache_directory}" -o -z "${dest_directory}" ] ; then
-    _print_sage
+    _print_usage
   fi
 }
 
